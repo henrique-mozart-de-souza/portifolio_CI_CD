@@ -1,0 +1,15 @@
+FROM jenkins/jenkins:lts
+
+# Muda para root para conseguir instalar pacotes no Linux do container
+USER root
+
+# Instala as dependências e o Docker CLI (Client)
+RUN apt-get update && \
+    apt-get install -y apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
+    curl -fsSL [https://download.docker.com/linux/debian/gpg](https://download.docker.com/linux/debian/gpg) | apt-key add - && \
+    add-apt-repository "deb [arch=amd64] [https://download.docker.com/linux/debian](https://download.docker.com/linux/debian) $(lsb_release -cs) stable" && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli && \
+    rm -rf /var/lib/apt/lists/*
+
+# Retorna para o usuário padrão do Jenkins (ou mantém root via docker-compose, dependendo da permissão do socket)
