@@ -50,8 +50,17 @@ pipeline {
 
         stage('4. Security Scan (Docker Scout)') {
             steps {
-                echo '🛡️ Varrendo imagem atrás de vulnerabilidades Críticas/Altas...'
-                sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock docker/scout-cli cves --exit-code --only-severity critical,high ${IMAGE_NAME}:latest"
+                echo '🛡️ Autenticando no Docker Hub e varrendo vulnerabilidades...'
+                
+                // Abre o cofre e puxa as variáveis de usuário e senha
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'DOCKER_PAT', usernameVariable: 'DOCKER_USER')]) {
+                    
+                    // Faz o login no motor Docker do Ubuntu usando as credenciais do cofre
+                    sh 'echo $DOCKER_PAT | docker login -u $DOCKER_USER --password-stdin'
+                    
+                    // Roda o Scout mapeando o arquivo de autenticação gerado (.docker) para dentro do container
+                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/jenkins_home/.docker:/root/.docker docker/scout-cli cves --exit-code --only-severity critical,high ${IMAGE_NAME}:latest"
+                }
             }
         }
 
