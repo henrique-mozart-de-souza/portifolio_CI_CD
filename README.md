@@ -58,6 +58,11 @@ portifolio_CI_CD/
 ### 1. Infraestrutura do Jenkins (Docker Compose)
 *(Arquivo responsável por subir o Jenkins com a estratégia Docker-out-of-Docker).*
 
+Após instalar o Jenkins, instalar os seguintes plugins:
+
+1. Docker Pipeline
+2. AWS Credentials
+
 * Criação da imagem Jenkins
 
 ```Dockerfile
@@ -67,13 +72,10 @@ FROM jenkins/jenkins:lts
 USER root
 
 # Instala as dependências e o Docker CLI (Client)
-RUN apt-get update && \
-    apt-get install -y apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
-    curl -fsSL [https://download.docker.com/linux/debian/gpg](https://download.docker.com/linux/debian/gpg) | apt-key add - && \
-    add-apt-repository "deb [arch=amd64] [https://download.docker.com/linux/debian](https://download.docker.com/linux/debian) $(lsb_release -cs) stable" && \
-    apt-get update && \
-    apt-get install -y docker-ce-cli && \
-    rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL -O https://download.docker.com/linux/static/stable/x86_64/docker-25.0.3.tgz && \
+    tar xzvf docker-25.0.3.tgz && \
+    mv docker/docker /usr/local/bin/ && \
+    rm -rf docker docker-25.0.3.tgz
 
 # Retorna para o usuário padrão do Jenkins (ou mantém root via docker-compose, dependendo da permissão do socket)
 ```

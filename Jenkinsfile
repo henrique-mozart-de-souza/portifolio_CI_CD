@@ -3,47 +3,54 @@ pipeline {
 
     environment {
         // ====================================================================
-        // 🚨 CONFIGURAÇÕES DO AWS ECR (PREENCHA ESTES DADOS POSTERIORMENTE) 🚨
-        // ====================================================================
         AWS_REGION         = 'us-east-1'
-        AWS_ACCOUNT_ID     = 'COLOQUE_SEU_ACCOUNT_ID_AQUI'
+        AWS_ACCOUNT_ID     = '365916940374'
         ECR_REPO_NAME      = 'meu-portfolio'
         ECR_REGISTRY       = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        AWS_CREDENTIALS_ID = 'aws-credentials-id' // Criaremos essa credencial na interface do Jenkins depois
+        AWS_CREDENTIALS_ID = 'aws-credentials-id'
         // ====================================================================
         
         IMAGE_NAME         = 'hms-portfolio-flask'
-        STAGING_PORT       = '5001' // Porta que o ambiente temporário vai usar no seu Ubuntu
+        STAGING_PORT       = '5001'
     }
 
     stages {
         stage('1. Checkout') {
             steps {
-                echo '📥 Baixando código fonte do repositório da aplicação...'
-                // Aqui o Jenkins vai clonar o seu repo 'meu_portfolio'
+                echo '📥 Baixando código da Pipeline de Testes (CI/CD)...'
                 checkout scm
+                
+                echo '📥 Baixando código fonte da Aplicação...'
+                // Remove a pasta app antiga (se existir) para evitar conflitos
+                sh 'rm -rf app || true'
+                // Clona o seu repositório da aplicação para dentro da pasta "app"
+                sh 'git clone https://github.com/henrique-mozart-de-souza/meu_portfolio.git app'
             }
         }
 
         stage('2. Linting (Hadolint)') {
             steps {
                 echo '🔎 Inspecionando Dockerfile em busca de más práticas...'
-                // Roda um container efêmero do Hadolint para validar o seu Dockerfile
-                sh 'docker run --rm -i hadolint/hadolint < Dockerfile'
+                // Entra na pasta da aplicação para rodar a análise
+                dir('app') {
+                    sh 'docker run --rm -i hadolint/hadolint < Dockerfile'
+                }
             }
         }
 
         stage('3. Build') {
             steps {
                 echo '🏗️ Construindo a imagem Docker da aplicação...'
-                sh "docker build -t ${IMAGE_NAME}:latest ."
+                // Entra na pasta da aplicação para fazer o build
+                dir('app') {
+                    sh "docker build -t ${IMAGE_NAME}:latest ."
+                }
             }
         }
 
         stage('4. Security Scan (Docker Scout)') {
             steps {
                 echo '🛡️ Varrendo imagem atrás de vulnerabilidades Críticas/Altas...'
-                // O --exit-code aborta o pipeline se achar falhas graves
                 sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock docker/scout-cli cves --exit-code --only-severity critical,high ${IMAGE_NAME}:latest"
             }
         }
@@ -51,19 +58,16 @@ pipeline {
         stage('5. Staging Deploy') {
             steps {
                 echo '🚀 Subindo container temporário para testes de carga...'
-                // Derruba qualquer container de staging antigo que tenha ficado travado
                 sh "docker rm -f staging-portfolio || true"
-                // Sobe o container validado na porta 5001
                 sh "docker run -d --name staging-portfolio -p ${STAGING_PORT}:5000 ${IMAGE_NAME}:latest"
-                // Aguarda 5 segundos para o Gunicorn/Flask iniciar
                 sleep 5 
             }
         }
 
         stage('6. Load Test (Locust)') {
             steps {
-                echo '🔥 Iniciando ataque de estresse no container Staging...'
-                // Roda o Locust usando um container efêmero na mesma rede do hospedeiro
+                echo '🔥 Iniciando ataque de estresse no container Staging e gerando artefatos...'
+                // Como o locustfile.py está na raiz do CI/CD, NÃO usamos o dir('app') aqui!
                 sh """
                 docker run --rm \
                   --network host \
@@ -73,6 +77,7 @@ pipeline {
                   -u 50 -r 10 \
                   --run-time 30s \
                   --host http://localhost:${STAGING_PORT} \
+                  --html=locust_report.html \
                   --exit-code-on-error 1
                 """
             }
@@ -82,21 +87,7 @@ pipeline {
             steps {
                 echo '📦 Testes aprovados! Promovendo imagem para a AWS...'
                 script {
-                    // Este bloco fará o login na AWS, "tageará" a imagem e fará o Push.
-                    // ATENÇÃO: Ele falhará até preenchermos as variáveis do ECR no topo.
-                    /*
-                    withCredentials([[
-                        $class: 'AmazonWebServicesCredentialsBinding', 
-                        credentialsId: "${AWS_CREDENTIALS_ID}", 
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                        sh "docker tag ${IMAGE_NAME}:latest ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
-                        sh "docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
-                    }
-                    */
-                    echo "⚠️ (Simulado) Push para o ECR ignorado até a configuração das credenciais."
+                    echo "⚠️ (Simulado) Push para o ECR ignorado até configurarmos o Account ID."
                 }
             }
         }
@@ -106,6 +97,9 @@ pipeline {
         always {
             echo '🧹 Limpando o ambiente de Staging...'
             sh "docker rm -f staging-portfolio || true"
+            
+            echo '📊 Salvando relatório visual de performance (HTML)...'
+            archiveArtifacts artifacts: 'locust_report.html', allowEmptyArchive: true
         }
         success {
             echo '✅ Pipeline concluído com sucesso! Imagem pronta para Produção.'
