@@ -52,14 +52,16 @@ pipeline {
             steps {
                 echo '🛡️ Autenticando no Docker Hub e varrendo vulnerabilidades...'
                 
-                // Abre o cofre e puxa as variáveis de usuário e senha
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'DOCKER_PAT', usernameVariable: 'DOCKER_USER')]) {
                     
-                    // Faz o login no motor Docker do Ubuntu usando as credenciais do cofre
+                    // 1. Faz o login no Docker Hub (já sabemos que isso está funcionando!)
                     sh 'echo $DOCKER_PAT | docker login -u $DOCKER_USER --password-stdin'
                     
-                    // Roda o Scout mapeando o arquivo de autenticação gerado (.docker) para dentro do container
-                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/jenkins_home/.docker:/root/.docker docker/scout-cli cves --exit-code --only-severity critical,high ${IMAGE_NAME}:latest"
+                    // 2. Instala o plugin do Docker Scout direto no Jenkins de forma rápida
+                    sh 'curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --'
+                    
+                    // 3. Roda o Scout nativamente (ele vai ler o login feito no passo 1 automaticamente)
+                    sh "docker scout cves --exit-code --only-severity critical,high ${IMAGE_NAME}:latest"
                 }
             }
         }
