@@ -119,11 +119,32 @@ pipeline {
             steps {
                 echo '📦 Testes aprovados! Promovendo imagem para a AWS...'
                 script {
-                    echo "⚠️ (Simulado) Push para o ECR ignorado até configurarmos o Account ID."
+                    // Puxa as chaves do cofre do Jenkins
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding', 
+                        credentialsId: "${AWS_CREDENTIALS_ID}", 
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        
+                        // 1. Usa o container oficial da AWS para gerar o token e repassa para o docker login
+                        sh """
+                        docker run --rm -i \
+                          -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                          -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                          amazon/aws-cli ecr get-login-password --region ${AWS_REGION} | \
+                          docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        """
+                        
+                        // 2. Etiqueta (Tag) a imagem local com o endereço do seu repositório na AWS
+                        sh "docker tag ${IMAGE_NAME}:latest ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
+                        
+                        // 3. Faz o upload da imagem para a nuvem!
+                        sh "docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
+                    }
                 }
             }
         }
-    }
 
     post {
         always {
