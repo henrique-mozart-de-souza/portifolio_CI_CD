@@ -82,34 +82,34 @@ pipeline {
                 # 0. Limpa resquícios de execuções anteriores, se houver
                 docker rm -f locust-runner || true
                 
-                # 1. Cria o container do Locust (mas não inicia ainda)
+                # 1. Cria o container usando a pasta /tmp (que permite gravação por qualquer usuário)
                 docker create --name locust-runner \\
                   --network host \\
-                  -w /mnt \\
-                  locustio/locust -f /mnt/locustfile.py \\
+                  -w /tmp \\
+                  locustio/locust -f /tmp/locustfile.py \\
                   --headless \\
                   -u 50 -r 10 \\
                   --run-time 30s \\
                   --host http://localhost:${STAGING_PORT} \\
-                  --html=/mnt/locust_report.html \\
+                  --html=/tmp/locust_report.html \\
                   --exit-code-on-error 1
                 
-                # 2. Copia o arquivo Python do workspace do Jenkins direto para o container
-                docker cp locustfile.py locust-runner:/mnt/locustfile.py
+                # 2. Copia o arquivo Python para a pasta /tmp do container
+                docker cp locustfile.py locust-runner:/tmp/locustfile.py
                 
-                # 3. Inicia o container e desativa temporariamente a falha do Jenkins (set +e) para pegarmos o código do erro
+                # 3. Inicia o container e captura o resultado
                 set +e
                 docker start -a locust-runner
                 LOCUST_EXIT=\$?
                 set -e
                 
-                # 4. Resgata o relatório visual HTML de volta para o Jenkins (mesmo se o teste falhou)
-                docker cp locust-runner:/mnt/locust_report.html ./locust_report.html || true
+                # 4. Resgata o relatório visual HTML de volta para o Jenkins
+                docker cp locust-runner:/tmp/locust_report.html ./locust_report.html || true
                 
                 # 5. Destrói o container do Locust
                 docker rm -f locust-runner || true
                 
-                # 6. Informa ao Jenkins se o Stage falhou ou passou baseado na resposta do Locust
+                # 6. Informa ao Jenkins o resultado final
                 exit \$LOCUST_EXIT
                 """
             }
