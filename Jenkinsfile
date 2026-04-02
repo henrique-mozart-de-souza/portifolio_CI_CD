@@ -136,10 +136,13 @@ pipeline {
                           docker login --username AWS --password-stdin ${ECR_REGISTRY}
                         """
                         
-                        // 2. Etiqueta (Tag) a imagem local com o endereço do seu repositório na AWS
+                        //2. Etiqueta a imagem com o número da execução do Jenkins (Ex: v7)
+                        sh "docker tag ${IMAGE_NAME}:latest ${ECR_REGISTRY}/${ECR_REPO_NAME}:v${BUILD_NUMBER}"
+                        // E também atualiza a latest para quem quiser sempre a última
                         sh "docker tag ${IMAGE_NAME}:latest ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
-                        
-                        // 3. Faz o upload da imagem para a nuvem!
+
+                        // 3. Manda ambas para a nuvem
+                        sh "docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:v${BUILD_NUMBER}"
                         sh "docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:latest"
                     }
                 }
