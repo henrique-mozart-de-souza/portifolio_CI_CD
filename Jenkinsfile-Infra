@@ -10,11 +10,15 @@ pipeline {
     }
 
     stages {
-        stage('1. Checkout') {
+        stage('1. Checkout da Infraestrutura') {
             steps {
-                echo '📥 Baixando código de Infraestrutura...'
-                // Baixa o código do próprio repositório onde este Jenkinsfile está
-                checkout scm
+                echo '🧹 Limpando workspace do Jenkins...'
+                // Limpa a pasta do Jenkins para não misturar os arquivos do repo CI/CD com os da Infra
+                deleteDir() 
+                
+                echo '📥 Baixando código do repositório portifolio_infra...'
+                // Clona o repositório de infraestrutura real para o Terraform trabalhar
+                git url: 'https://github.com/henrique-mozart-de-souza/portifolio_infra.git', branch: 'main'
             }
         }
 
