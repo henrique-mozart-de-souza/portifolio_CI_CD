@@ -148,6 +148,32 @@ pipeline {
                 }
             }
         }
+        
+        stage('8. Deploy no ECS (Atualização do Site)') {
+            steps {
+                echo '🔄 Avisando o ECS para atualizar o container...'
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding', 
+                        credentialsId: 'aws-credentials-id', 
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        // Força o gerente do ECS a matar o container antigo e puxar a nova imagem 'latest'
+                        sh """
+                        docker run --rm \
+                          -e AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID \
+                          -e AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY \
+                          amazon/aws-cli ecs update-service \
+                          --cluster hms-cluster-dev \
+                          --service hms-portfolio-service-dev \
+                          --force-new-deployment \
+                          --region ${AWS_REGION}
+                        """
+                    }
+                }
+            }
+        }
     }
 
     post {

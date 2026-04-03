@@ -1,0 +1,104 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION       = 'us-east-1'
+        // Desliga perguntas interativas do Terraform no terminal
+        TF_IN_AUTOMATION = 'true'
+        // Define o ambiente alvo
+        TF_WORKSPACE     = 'dev' 
+    }
+
+    stages {
+        stage('1. Checkout') {
+            steps {
+                echo '📥 Baixando código de Infraestrutura...'
+                // Baixa o código do próprio repositório onde este Jenkinsfile está
+                checkout scm
+            }
+        }
+
+        stage('2. Setup & Init') {
+            steps {
+                echo '⚙️ Preparando o ambiente Terraform...'
+                
+                // Instala o tfswitch na máquina do Jenkins (caso não tenha)
+                sh 'curl -L https://raw.githubusercontent.com/warrensbox/terraform-switcher/release/install.sh | bash || true'
+                sh 'tfswitch'
+                
+                // Injeta as credenciais da AWS apenas durante este bloco
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh 'terraform init'
+                    // Tenta selecionar o workspace 'dev'. Se não existir, ele cria na hora.
+                    sh 'terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}'
+                }
+            }
+        }
+
+        stage('3. Lint & Validate') {
+            steps {
+                echo '🔎 Checando formatação e sintaxe...'
+                // Se o código estiver mal identado, a pipeline quebra aqui (Boas práticas!)
+                sh 'terraform fmt -check'
+                sh 'terraform validate'
+            }
+        }
+
+        stage('4. Plan') {
+            steps {
+                echo '🗺️ Gerando o plano de execução...'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // Cria um arquivo físico 'tfplan' com as mudanças planejadas
+                    sh 'terraform plan -var-file="environments/${TF_WORKSPACE}.tfvars" -out=tfplan'
+                }
+            }
+        }
+
+        stage('5. Aprovação Manual') {
+            steps {
+                echo '⏳ Aguardando aprovação humana (Timeout de 30 minutos)...'
+                // A pipeline congela aqui. O Jenkins libera a interface para você clicar.
+                timeout(time: 30, unit: 'MINUTES') {
+                    input message: 'Revise o Terraform Plan no Console Output. Deseja aplicar na AWS?', ok: 'Aprovar e Provisionar'
+                }
+            }
+        }
+
+        stage('6. Apply') {
+            steps {
+                echo '🚀 Aplicando infraestrutura na AWS...'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // Executa exatamente o que foi aprovado no arquivo 'tfplan'
+                    sh 'terraform apply tfplan'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Infraestrutura provisionada com sucesso! Verifique os Outputs no final do log do Jenkins.'
+        }
+        aborted {
+            echo '⏸️ Pipeline cancelada ou tempo de aprovação esgotado. Nenhuma mudança foi feita na AWS.'
+        }
+        failure {
+            echo '❌ Erro ao provisionar infraestrutura. Verifique os logs.'
+        }
+    }
+}
