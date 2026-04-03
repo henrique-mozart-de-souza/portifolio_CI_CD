@@ -1,0 +1,86 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION       = 'us-east-1'
+        TF_IN_AUTOMATION = 'true'
+        TF_WORKSPACE     = 'dev' 
+    }
+
+    stages {
+        stage('1. Checkout da Infraestrutura') {
+            steps {
+                echo '🧹 Limpando workspace do Jenkins...'
+                deleteDir() 
+                
+                echo '📥 Baixando código do repositório portifolio_infra...'
+                git url: 'https://github.com/henrique-mozart-de-souza/portifolio_infra.git', branch: 'main'
+            }
+        }
+
+        stage('2. Setup & Init') {
+            steps {
+                echo '⚙️ Preparando o ambiente Terraform...'
+                sh 'curl -L https://raw.githubusercontent.com/warrensbox/terraform-switcher/release/install.sh | bash || true'
+                sh 'tfswitch'
+                
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('3. Plan Destroy') {
+            steps {
+                echo '💥 Planejando a destruição da infraestrutura...'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // O parâmetro -destroy mostra o que vai ser apagado (tudo em vermelho)
+                    sh 'terraform plan -destroy -var-file="environments/${TF_WORKSPACE}.tfvars" -out=tfdestroyplan -no-color'
+                }
+            }
+        }
+
+        stage('4. Confirmação Manual de Destruição') {
+            steps {
+                echo '⚠️ AVISO: Aguardando confirmação humana para DESTRUIR a infraestrutura...'
+                timeout(time: 15, unit: 'MINUTES') {
+                    input message: 'PERIGO: Deseja realmente APAGAR toda a infraestrutura na AWS?', ok: 'Sim, Destruir Tudo'
+                }
+            }
+        }
+
+        stage('5. Destroy') {
+            steps {
+                echo '🔥 Destruindo infraestrutura...'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // Aplica o plano de destruição
+                    sh 'terraform apply -no-color tfdestroyplan'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Infraestrutura destruída com sucesso. Zero custos na AWS!'
+        }
+        aborted {
+            echo '⏸️ Destruição cancelada. O ambiente continua no ar.'
+        }
+    }
+}
