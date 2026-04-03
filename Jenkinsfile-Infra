@@ -26,20 +26,17 @@ pipeline {
             steps {
                 echo '⚙️ Preparando o ambiente Terraform...'
                 
-                // Instala o tfswitch na máquina do Jenkins (caso não tenha)
                 sh 'curl -L https://raw.githubusercontent.com/warrensbox/terraform-switcher/release/install.sh | bash || true'
                 sh 'tfswitch'
                 
-                // Injeta as credenciais da AWS apenas durante este bloco
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding', 
                     credentialsId: 'aws-credentials-id', 
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
+                    // Inicia o Terraform (Ele já vai ler o TF_WORKSPACE automaticamente)
                     sh 'terraform init'
-                    // Tenta selecionar o workspace 'dev'. Se não existir, ele cria na hora.
-                    sh 'terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}'
                 }
             }
         }
