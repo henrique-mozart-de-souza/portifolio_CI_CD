@@ -45,8 +45,8 @@ pipeline {
             steps {
                 echo '🔎 Checando formatação e sintaxe...'
                 // Se o código estiver mal identado, a pipeline quebra aqui (Boas práticas!)
-                sh 'terraform fmt -check'
-                sh 'terraform validate'
+                sh 'terraform fmt -check -no-color'
+                sh 'terraform validate -no-color'
             }
         }
 
@@ -60,7 +60,7 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     // Cria um arquivo físico 'tfplan' com as mudanças planejadas
-                    sh 'terraform plan -var-file="environments/${TF_WORKSPACE}.tfvars" -out=tfplan'
+                    sh 'terraform plan -var-file="environments/${TF_WORKSPACE}.tfvars" -out=tfplan -no-color'
                 }
             }
         }
@@ -85,7 +85,7 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     // Executa exatamente o que foi aprovado no arquivo 'tfplan'
-                    sh 'terraform apply tfplan'
+                    sh 'terraform apply -no-color tfplan'
                 }
             }
         }
