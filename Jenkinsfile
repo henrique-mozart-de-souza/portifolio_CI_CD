@@ -4,7 +4,7 @@ pipeline {
     environment {
         // ====================================================================
         AWS_REGION         = 'us-east-1'
-        AWS_ACCOUNT_ID     = '365916940374'
+        AWS_ACCOUNT_ID     = credentials('aws-account-id')
         ECR_REPO_NAME      = 'meu-portfolio'
         ECR_REGISTRY       = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         AWS_CREDENTIALS_ID = 'aws-credentials-id'
